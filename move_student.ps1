@@ -1,55 +1,53 @@
-#################################################################
-#       This script will move students between OU's             #
-#       Written by Trevor van Veen                              #
-#                                                               #
-#################################################################
+# script to move students and to update server folders
 
-# Import Modules
+# TODO - create functions for respective tasks so that multiple students can be iterated in a loop from csv
+
+# imports
 import-module ActiveDirectory
-$date = Get-Date -UFormat "%m/%d/%Y"
 
-# list of schools in an array to compare to for error checking 
+# array of school site codes for error checking, dont forget to update as schools are added
 $schoolArray = @('BAC','BAU','BEA','BEN','BET','BLE','BOL','CHS','CLP','CPE','DUN','EXP','EYE','FCH','FRH','HAR','IRI','JOH','KIN','KRU',
 'LAU','LES','LIN','LIV','LNT','LOP','MCG','ODE','OLA','OPT','PCA','PHS','POA','POL','PRE','PUT','RED','RIC','RIF','RMH','SHE','STO',
 'TAV','TIM','TRA','WEB','WEL','WER','ZAC')
 
-# set the OU 
+# some globals
+$date = Get-Date -UFormat "%m/%d/%Y"
 $OU = 'OU=Students,DC=psdschools,DC=org'
 
-# get the students number
-$sNum = Read-Host 'Enter the student number'
-
-# try/catch to make sure the user exists in AD, if not the program will exit
-try {
-    $student = Get-ADUser $sNum 
-    Write-Host "Student $snum found."
-}catch{
-    Write-Host 'Student not found, better luck next time.'
-    exit
+# first error check, validate input of a real student in AD
+$StudentExist = $false
+while($StudentExist -eq $false){
+    $sNum = Read-Host 'Enter the student number'
+    try {
+        $student = Get-ADUser $sNum 
+        Write-Host "Student $snum found."
+        $StudentExist = $true
+    }catch{
+        Write-Host 'Student not found,try again.'
+    }
 }
 
-# set var for the current students OU
+# more variables 
 $oldOU = $student.DistinguishedName
-
-# cut the full ou down to just the 3 letter abreviation 
 $simpleOldOU = (($student.DistinguishedName -split ",",2)[1]).Substring(3,3)
 
-# get the 3 letter abreviation for the school user is going to move the student to 
-$newOU = (Read-Host 'Enter the school the student needs to be moved to').ToUpper()
-
-#check to make sure that the school that was entered matches a school in AD, if not the program will exit
-if($schoolArray -contains $newOU){
-    ### move student to new OU ###
-    Move-ADobject -Identity $oldOU -TargetPath "OU=$newOU,$OU" 
-}else{
-    Write-Host "Fat finger strikes again, there is no school named $newOU"
-    exit
+# second error check, validate input of site code
+$schoolExist = $false
+while($schoolExist -eq $false){
+    $newOU = (Read-Host 'Enter the school the student needs to be moved to').ToUpper()
+    if($schoolArray -contains $newOU){ 
+        Move-ADobject -Identity $oldOU -TargetPath "OU=$newOU,$OU"
+        $schoolExist = $true 
+    }else{
+        Write-Host "$newOU doesnt exist, try again."
+        $schoolExist = $false
+     } 
 }
 
 # set the users description 
 Set-ADUser $sNum -Description "Moved from $simpleOldOU to $newOU on $date"
 
-# variables for the students groups for membership modification
+# even more variables
 $oldSGroup = $simpleOldOU + 'Students'
 $newSGroup = $newOU + 'Students'
 
@@ -65,15 +63,16 @@ if($newOU -eq 'EXP'){
 }else{
     $newFolderPath = "\\psdfiles\$newOU\Students\$sNum"
 }
-
 if($simpleOldOU -eq 'EXP'){
     $oldFolderPath ="\\psdfiles\PCA\EXPStudents\$sNum"
 }else{
     $oldFolderPath = "\\psdfiles\$simpleOldOU\Students\$sNum"
 }
+# TODO - add logic for PGA folders
 
-# Might need these for the script to reach the network fileserver
-# Microsoft.PowerShell.Core\FileSystem::
+# if newOU = POA, then dont move folder ? figure out best option for this
+# if simpleOldOU = POA, create folder in new path
+
 
 # move the students folder
 Move-Item -Path $oldFolderPath -Destination $newFolderPath
@@ -87,7 +86,7 @@ $AccessRule2 = New-Object System.Security.AccessControl.FileSystemAccessRule("PS
 $acl.AddAccessRule($AccessRule1)
 $acl.AddAccessRule($AccessRule2)
 
-# ignore the error on this, will still set the acl, just doesnt know im admin
+# ignore the error on this, will still set the acl, just doesnt know if admin in AD
 Set-Acl $newFolderPath $acl -EA SilentlyContinue
 
 # the path for the students profile in AD
