@@ -68,11 +68,19 @@ if($simpleOldOU -eq 'EXP'){
 }else{
     $oldFolderPath = "\\psdfiles\$simpleOldOU\Students\$sNum"
 }
-# TODO - add logic for PGA folders
-
-# if newOU = POA, then dont move folder ? figure out best option for this
-# if simpleOldOU = POA, create folder in new path
-
+# logic for PGA folders
+if($newOU -eq 'POA'){
+    $newFolderPath = "\\psdfiles\$simpleOldOU\EXPStudents\$sNum"
+}else{
+    $newFolderPath = "\\psdfiles\$newOU\Students\$sNum"
+}
+if($simpleOldOU -eq 'POA'){
+    # create a folder @ newFolderPath
+    $newFolderPath = "\\psdfiles\$newOU\Students\$sNum"
+    New-Item - Path $newFolderPath -type Directory -Force    
+}else{
+    $oldFolderPath = "\\psdfiles\$simpleOldOU\Students\$sNum"
+}
 
 # move the students folder
 Move-Item -Path $oldFolderPath -Destination $newFolderPath
@@ -85,11 +93,9 @@ $AccessRule1 = New-Object System.Security.AccessControl.FileSystemAccessRule("PS
 $AccessRule2 = New-Object System.Security.AccessControl.FileSystemAccessRule("PSDSCHOOLS.ORG\$simpleStaff",'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow')
 $acl.AddAccessRule($AccessRule1)
 $acl.AddAccessRule($AccessRule2)
-
 # ignore the error on this, will still set the acl, just doesnt know if admin in AD
 Set-Acl $newFolderPath $acl -EA SilentlyContinue
 
+
 # the path for the students profile in AD
 Set-ADUser $sNum -HomeDirectory $newFolderPath
-
-Write-Host "Done"
